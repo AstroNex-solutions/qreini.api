@@ -184,7 +184,7 @@ router.get('/users', async (req, res) => {
 
 router.post('/users', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, status, permissions } = req.body;
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password || '123456', salt);
     
@@ -192,7 +192,9 @@ router.post('/users', async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: role || 'خدمة العملاء'
+      role: role || 'support',
+      status: status || 'active',
+      permissions: permissions || null,
     });
     
     // Return user without password
@@ -206,8 +208,12 @@ router.post('/users', async (req, res) => {
 
 router.put('/users/:id', async (req, res) => {
   try {
-    const { name, email, role, status, password } = req.body;
+    const { name, email, role, status, password, permissions } = req.body;
     const updateData = { name, email, role, status };
+    
+    if (permissions !== undefined) {
+      updateData.permissions = permissions;
+    }
     
     if (password) {
       const salt = await bcrypt.genSalt(10);

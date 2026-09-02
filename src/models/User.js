@@ -23,7 +23,25 @@ const User = sequelize.define('User', {
   role: {
     type: DataTypes.ENUM('admin', 'sales', 'support'),
     defaultValue: 'support',
-  }
+  },
+  status: {
+    type: DataTypes.ENUM('active', 'inactive'),
+    defaultValue: 'active',
+  },
+  permissions: {
+    type: DataTypes.JSON,
+    defaultValue: {
+      orders: { view: false, edit: false, delete: false },
+      products: { view: false, edit: false, delete: false },
+      customers: { view: false, edit: false, delete: false },
+      reports: { view: false },
+      offers: { view: false, edit: false, delete: false },
+      chat: { view: false },
+      settings: { edit: false },
+      users: { view: false, edit: false },
+      samples: { view: false, edit: false, delete: false },
+    },
+  },
 }, {
   timestamps: true,
 });

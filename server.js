@@ -51,7 +51,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5500;
 
 async function initAdmin() {
   const adminEmail = 'admin@qreini.com';

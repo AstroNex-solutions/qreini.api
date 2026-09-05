@@ -16,6 +16,10 @@ const Customer = sequelize.define('Customer', {
     unique: true,
     allowNull: false,
   },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   phone: {
     type: DataTypes.STRING,
   },
@@ -28,6 +32,14 @@ const Customer = sequelize.define('Customer', {
   },
   lastVisit: {
     type: DataTypes.DATE,
+  },
+  resetPasswordOtp: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  resetPasswordExpires: {
+    type: DataTypes.DATE,
+    allowNull: true,
   }
 }, {
   timestamps: true,

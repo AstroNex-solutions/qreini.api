@@ -7,10 +7,16 @@ const sequelize = new Sequelize(
   process.env.DB_PASS || '',
   {
     host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 3306,
     dialect: 'mysql',
-    logging: false, // Set to true to see SQL queries in console
+    logging: false,
+    pool: {
+      max: 10,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    }
   }
 );
 
-// We will sync models in server.js or explicitly here
 module.exports = sequelize;

@@ -237,6 +237,48 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
+// Categories Route
+router.get('/categories', async (req, res) => {
+  try {
+    const { Category } = require('../models');
+    const categories = await Category.findAll();
+    res.json(categories);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/categories', async (req, res) => {
+  try {
+    const { Category } = require('../models');
+    const category = await Category.create(req.body);
+    res.status(201).json(category);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.put('/categories/:id', async (req, res) => {
+  try {
+    const { Category } = require('../models');
+    await Category.update(req.body, { where: { id: req.params.id } });
+    const category = await Category.findByPk(req.params.id);
+    res.json(category);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.delete('/categories/:id', async (req, res) => {
+  try {
+    const { Category } = require('../models');
+    await Category.destroy({ where: { id: req.params.id } });
+    res.json({ message: 'Deleted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Offers Route
 router.get('/offers', async (req, res) => {
   try {
@@ -325,7 +367,14 @@ router.get('/designs', async (req, res) => {
 
 router.post('/designs', async (req, res) => {
   try {
-    const design = await Design.create(req.body);
+    const payload = {
+      ...req.body,
+      title: req.body.title || req.body.name || 'طلب تصميم مخصص',
+      image: req.body.image || req.body.logo || null,
+      status: req.body.status || 'قيد المراجعة',
+      author: req.body.author || req.body.clientName || 'عميل'
+    };
+    const design = await Design.create(payload);
     res.status(201).json(design);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -520,6 +569,83 @@ router.get('/dashboard/category-chart', async (req, res) => {
     }).filter(d => d.value > 0);
 
     res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// B2B Pricing Settings Route
+router.get('/b2b/settings', async (req, res) => {
+  try {
+    const { Setting } = require('../models');
+    // Fetch only B2B settings
+    const settings = await Setting.findAll({
+      where: {
+        key: ['b2b_school_price', 'b2b_medical_price', 'b2b_security_price', 'b2b_hotel_price', 'b2b_discount_50', 'b2b_discount_200', 'b2b_discount_500']
+      }
+    });
+    const settingsObj = {};
+    settings.forEach(s => settingsObj[s.key] = s.value);
+    res.json(settingsObj);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/b2b/settings', async (req, res) => {
+  try {
+    const { Setting } = require('../models');
+    const settingsData = req.body;
+    for (const [key, value] of Object.entries(settingsData)) {
+      const existing = await Setting.findOne({ where: { key } });
+      if (existing) {
+        await existing.update({ value: String(value) });
+      } else {
+        await Setting.create({ key, value: String(value) });
+      }
+    }
+    res.json({ message: 'B2B Settings saved' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// B2B Requests Routes
+router.post('/b2b/requests', async (req, res) => {
+  try {
+    const { B2BRequest } = require('../models');
+    const request = await B2BRequest.create(req.body);
+    res.status(201).json(request);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.get('/b2b/requests', async (req, res) => {
+  try {
+    const { B2BRequest } = require('../models');
+    const requests = await B2BRequest.findAll({ order: [['createdAt', 'DESC']] });
+    res.json(requests);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/b2b/requests/:id/status', async (req, res) => {
+  try {
+    const { B2BRequest } = require('../models');
+    await B2BRequest.update({ status: req.body.status }, { where: { id: req.params.id } });
+    res.json({ message: 'Status updated' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/b2b/requests/:id', async (req, res) => {
+  try {
+    const { B2BRequest } = require('../models');
+    await B2BRequest.destroy({ where: { id: req.params.id } });
+    res.json({ message: 'Deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

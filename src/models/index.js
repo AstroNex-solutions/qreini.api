@@ -10,6 +10,8 @@ const Conversation = require('./Conversation');
 const Message = require('./Message');
 const Setting = require('./Setting');
 const Sample = require('./Sample');
+const Category = require('./Category');
+const B2BRequest = require('./B2BRequest');
 
 // Define Relationships
 
@@ -59,5 +61,7 @@ module.exports = {
   Conversation,
   Message,
   Setting,
-  Sample
+  Sample,
+  Category,
+  B2BRequest
 };

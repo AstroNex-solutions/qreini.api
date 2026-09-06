@@ -21,7 +21,7 @@ const io = new Server(server, {
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(helmet({ crossOriginResourcePolicy: false })); // To allow image loading from other origins
 app.use(morgan('dev'));
 app.use(express.json({ limit: '50mb' }));
@@ -51,7 +51,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 5000;
 
 async function initAdmin() {
   const adminEmail = 'admin@qreini.com';
@@ -76,7 +76,7 @@ async function startServer() {
   try {
     // Authenticate and sync Sequelize models with MySQL
     await sequelize.authenticate();
-    await sequelize.sync({ alter: 0 });
+    await sequelize.sync({ alter: 1 });
     console.log('MySQL Database connected and synced via Sequelize successfully');
     
     await initAdmin();

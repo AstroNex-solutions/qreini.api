@@ -11,6 +11,12 @@ const Design = sequelize.define('Design', {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  description: {
+    type: DataTypes.TEXT,
+  },
+  phone: {
+    type: DataTypes.STRING,
+  },
   image: {
     type: DataTypes.STRING,
   },

@@ -126,8 +126,8 @@ async function seed() {
 
       // Add 1-4 items per order
       const itemsCount = faker.number.int({ min: 1, max: 4 });
-      for (let j = 0; j < itemsCount; j++) {
-        const product = faker.helpers.arrayElement(createdProducts);
+      const selectedProducts = faker.helpers.arrayElements(createdProducts, itemsCount);
+      for (const product of selectedProducts) {
         await OrderItem.create({
           OrderId: order.id,
           ProductId: product.id,
@@ -142,6 +142,7 @@ async function seed() {
     for (let i = 0; i < 5; i++) {
       offers.push({
         title: faker.commerce.productAdjective() + ' Offer',
+        code: faker.string.alphanumeric(10).toUpperCase(),
         description: faker.lorem.sentence(),
         type: faker.helpers.arrayElement(['percentage', 'fixed']),
         status: faker.helpers.arrayElement(['active', 'expired']),

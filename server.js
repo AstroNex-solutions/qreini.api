@@ -76,7 +76,7 @@ async function startServer() {
   try {
     // Authenticate and sync Sequelize models with MySQL
     await sequelize.authenticate();
-    await sequelize.sync({ alter: 1 });
+    await sequelize.sync({ alter: 0 });
     console.log('MySQL Database connected and synced via Sequelize successfully');
     
     await initAdmin();

@@ -1,9 +1,9 @@
-const { 
-  sequelize, 
-  Product, 
-  Customer, 
-  Order, 
-  OrderItem, 
+const {
+  sequelize,
+  Product,
+  Customer,
+  Order,
+  OrderItem,
   User,
   Offer,
   Design,

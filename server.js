@@ -2,6 +2,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -57,6 +58,9 @@ app.use(express.urlencoded({
 }));
 
 app.use('/uploads', express.static('uploads'));
+
+// Public landing page (القريني)
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Socket.io
 const io = new Server(server, {

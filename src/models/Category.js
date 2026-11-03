@@ -22,6 +22,10 @@ const Category = sequelize.define('Category', {
   },
   iconColor: {
     type: DataTypes.STRING,
+  },
+  image: {
+    type: DataTypes.TEXT,
+    allowNull: true,
   }
 }, {
   timestamps: true,

@@ -18,7 +18,7 @@ const Design = sequelize.define('Design', {
     type: DataTypes.STRING,
   },
   image: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
   },
   status: {
     type: DataTypes.STRING, // 'معتمد', 'قيد المراجعة', 'مسودة'

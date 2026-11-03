@@ -20,6 +20,15 @@ const Order = sequelize.define('Order', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false,
   },
+  paymentMethod: {
+    type: DataTypes.STRING,
+    defaultValue: 'cash_on_delivery',
+    allowNull: true,
+  },
+  notes: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
 }, {
   timestamps: true,
 });

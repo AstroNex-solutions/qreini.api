@@ -7,7 +7,7 @@ const bcrypt = require('bcrypt');
 const { Product, Customer, Order, OrderItem, Design, Conversation, Message, User } = require('../models');
 
 // Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, '../../uploads');
+const uploadsDir = path.resolve(__dirname, '../../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -17,16 +17,51 @@ const storage = multer.diskStorage({
     cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
+    const rawExt = path.extname(file.originalname || '');
+    const cleanExt = (rawExt ? rawExt.toLowerCase() : '.png').replace(/[^a-z0-9.]/gi, '');
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    cb(null, `${uniqueSuffix}${cleanExt}`);
   }
 });
-const upload = multer({ storage: storage });
+
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'image/svg+xml',
+    'application/pdf'
+  ];
+  if (allowedMimeTypes.includes(file.mimetype.toLowerCase())) {
+    cb(null, true);
+  } else {
+    cb(new Error('نوع الملف غير مدعوم. يرجى رفع صورة بصيغة (JPG, PNG, WEBP, SVG, GIF) أو ملف PDF'), false);
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 25 * 1024 * 1024 // 25MB max
+  },
+  fileFilter: fileFilter
+});
 
 // Products Routes
+// Auto-sync Product schema to ensure new columns exist in database
+Product.sync({ alter: true }).catch(() => {});
+
 router.get('/products', async (req, res) => {
   try {
-    const products = await Product.findAll();
+    const where = {};
+    if (req.query.isQreini === 'true') {
+      where.isQreiniProduct = true;
+    } else if (req.query.isQreini === 'false') {
+      where.isQreiniProduct = false;
+    }
+    const products = await Product.findAll({ where, order: [['createdAt', 'DESC']] });
     res.json(products);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -96,6 +131,9 @@ router.delete('/customers/:id', async (req, res) => {
   }
 });
 // Orders Routes
+// Auto-sync Order schema to ensure paymentMethod and notes columns exist
+Order.sync({ alter: true }).catch(() => {});
+
 router.get('/orders', async (req, res) => {
   try {
     const orders = await Order.findAll({ 
@@ -125,7 +163,13 @@ router.post('/orders', async (req, res) => {
         }
       }
       orderData.totalAmount = totalAmount;
+    } else if (req.body.totalAmount) {
+      orderData.totalAmount = Number(req.body.totalAmount);
     }
+
+    // Assign payment method & notes
+    orderData.paymentMethod = req.body.paymentMethod || 'cash_on_delivery';
+    orderData.notes = req.body.notes || null;
 
     const order = await Order.create(orderData);
 
@@ -241,7 +285,53 @@ router.delete('/users/:id', async (req, res) => {
 router.get('/categories', async (req, res) => {
   try {
     const { Category } = require('../models');
-    const categories = await Category.findAll();
+    await Category.sync();
+    let categories = await Category.findAll();
+    
+    // Seed initial categories if completely empty
+    if (!categories || categories.length === 0) {
+      const defaultCategories = [
+        {
+          label: 'الزي المدرسي',
+          sub: 'للمدارس والجامعات',
+          iconName: 'GraduationCap',
+          image: '/cat_school.jpg',
+          color: 'from-amber-600/10 to-amber-900/5',
+          iconColor: 'text-amber-700'
+        },
+        {
+          label: 'السكراب الطبي',
+          sub: 'للقطاع الصحي والمستشفيات',
+          iconName: 'Stethoscope',
+          image: '/cat_medical.jpg',
+          color: 'from-emerald-600/10 to-emerald-900/5',
+          iconColor: 'text-emerald-700'
+        },
+        {
+          label: 'الزي الأمني',
+          sub: 'للحراسات والأمن الخاص',
+          iconName: 'ShieldCheck',
+          image: '/cat_security.jpg',
+          color: 'from-blue-600/10 to-blue-900/5',
+          iconColor: 'text-blue-700'
+        },
+        {
+          label: 'طقم الشيف',
+          sub: 'للمطاعم والضيافة والفنادق',
+          iconName: 'UtensilsCrossed',
+          image: '/cat_chef.jpg',
+          color: 'from-orange-600/10 to-orange-900/5',
+          iconColor: 'text-orange-700'
+        }
+      ];
+      try {
+        await Category.bulkCreate(defaultCategories);
+        categories = await Category.findAll();
+      } catch (e) {
+        return res.json(defaultCategories.map((c, idx) => ({ id: idx + 1, ...c })));
+      }
+    }
+    
     res.json(categories);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -346,13 +436,44 @@ router.post('/settings', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-router.post('/upload', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
-  // Construct URL
-  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-  res.json({ url: fileUrl });
+router.post('/upload', (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'حجم الملف كبير جداً. الحد الأقصى المسموح به هو 25 ميجابايت' });
+      }
+      return res.status(400).json({ error: `خطأ في رفع الملف: ${err.message}` });
+    } else if (err) {
+      return res.status(400).json({ error: err.message || 'فشل في رفع الملف' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'لم يتم استلام أي ملف للرفع' });
+    }
+
+    // Determine correct protocol (HTTPS vs HTTP)
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const host = req.get('host') || '';
+    const isProductionHost = !host.includes('localhost') && !host.includes('127.0.0.1');
+    const isHttps = forwardedProto === 'https' || req.protocol === 'https' || isProductionHost;
+    const protocol = isHttps ? 'https' : 'http';
+
+    // Base URL resolution
+    const baseUrl = process.env.APP_URL 
+      ? process.env.APP_URL.replace(/\/$/, '') 
+      : `${protocol}://${host}`;
+
+    const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
+    const relativePath = `/uploads/${req.file.filename}`;
+
+    res.json({
+      url: fileUrl,
+      path: relativePath,
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+  });
 });
 
 // Designs Route
@@ -653,5 +774,178 @@ router.delete('/b2b/requests/:id', async (req, res) => {
 
 // Samples Routes
 router.use('/samples', require('./samples'));
+
+// Partners Routes
+router.get('/partners', async (req, res) => {
+  try {
+    const { Partner } = require('../models');
+    await Partner.sync();
+    let partners = await Partner.findAll({ order: [['order', 'ASC'], ['id', 'ASC']] });
+    
+    // Seed default partners if completely empty
+    if (!partners || partners.length === 0) {
+      const defaultPartners = [
+        { name: 'مستشفى الشميساني التخصصي', image: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=300&auto=format&fit=crop&q=80', link: 'https://alshmaisani.com', order: 1 },
+        { name: 'مدارس الكلية العلمية الإسلامية', image: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=300&auto=format&fit=crop&q=80', link: 'https://islamic-college.edu.jo', order: 2 },
+        { name: 'فندق وأجنحة لاند مارك عمان', image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=300&auto=format&fit=crop&q=80', link: 'https://landmarkamman.com', order: 3 },
+        { name: 'شركة النسر للأمن والحماية', image: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=300&auto=format&fit=crop&q=80', link: 'https://eaglesecurity.jo', order: 4 },
+        { name: 'سلسلة مطاعم ورد الشام', image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=300&auto=format&fit=crop&q=80', link: 'https://wardalsham.com', order: 5 },
+        { name: 'أكاديمية رواد المستقبل الدولية', image: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=300&auto=format&fit=crop&q=80', link: 'https://futureleaders.edu.jo', order: 6 }
+      ];
+      try {
+        await Partner.bulkCreate(defaultPartners);
+        partners = await Partner.findAll({ order: [['order', 'ASC'], ['id', 'ASC']] });
+      } catch (e) {
+        return res.json(defaultPartners.map((p, idx) => ({ id: idx + 1, ...p })));
+      }
+    }
+    
+    res.json(partners);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/partners', async (req, res) => {
+  try {
+    const { Partner } = require('../models');
+    await Partner.sync();
+    const partner = await Partner.create(req.body);
+    res.status(201).json(partner);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.put('/partners/:id', async (req, res) => {
+  try {
+    const { Partner } = require('../models');
+    await Partner.sync();
+    await Partner.update(req.body, { where: { id: req.params.id } });
+    const updated = await Partner.findByPk(req.params.id);
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.delete('/partners/:id', async (req, res) => {
+  try {
+    const { Partner } = require('../models');
+    await Partner.sync();
+    await Partner.destroy({ where: { id: req.params.id } });
+    res.json({ message: 'Deleted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Testimonials Routes
+router.get('/testimonials', async (req, res) => {
+  try {
+    const { Testimonial } = require('../models');
+    await Testimonial.sync();
+    
+    // For admin with query ?all=true, return all; otherwise return active
+    const whereClause = req.query.all === 'true' ? {} : { isActive: true };
+    let testimonials = await Testimonial.findAll({ 
+      where: whereClause,
+      order: [['order', 'ASC'], ['createdAt', 'DESC']] 
+    });
+    
+    // Seed default testimonials if completely empty
+    if (!testimonials || testimonials.length === 0) {
+      const defaultTestimonials = [
+        {
+          name: 'فندق جراند بالاس عمان',
+          role: 'إدارة الضيافة والمشتريات',
+          comment: 'تعاملنا مع شركة القريني لتجهيز زي الاستقبال والشيفات، وكانت الخامة ممتازة والتفصيل دقيقاً جداً وبمستوى فندقي عالمي.',
+          rating: 5,
+          badge: 'قطاع الضيافة والفنادق',
+          image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=200&auto=format&fit=crop&q=80',
+          isActive: true,
+          order: 1
+        },
+        {
+          name: 'مستشفى الشميساني التخصصي',
+          role: 'رئاسة التمريض والعمليات',
+          comment: 'السكراب الطبي مريح للغاية في نوبات العمل الطويلة، قماش بارد ولا ينكمش مع الغسيل والتعقيم المتكرر، نشكركم على الاحترافية.',
+          rating: 5,
+          badge: 'القطاع الصحي والمستشفيات',
+          image: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=200&auto=format&fit=crop&q=80',
+          isActive: true,
+          order: 2
+        },
+        {
+          name: 'مدارس الرواد الدولية',
+          role: 'قسم شؤون الطلبة والهوية المدرسية',
+          comment: 'جودة استثنائية للزي المدرسي والرياضي لطلابنا، التزام تام بمواعيد التسليم قبل بدء العام الدراسي وتطريز الشعار متقن جداً.',
+          rating: 5,
+          badge: 'القطاع التعليمي والمدارس',
+          image: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=200&auto=format&fit=crop&q=80',
+          isActive: true,
+          order: 3
+        },
+        {
+          name: 'شركة الحراسات الأمنية الحديثة',
+          role: 'إدارة العمليات الميدانية',
+          comment: 'البدلات الميدانية قوية وعملية وتتحمل أقصى ظروف العمل، والأهم من ذلك المظهر المهني المهيب الذي منحته لحراسنا.',
+          rating: 5,
+          badge: 'الأمن والحراسات',
+          image: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=200&auto=format&fit=crop&q=80',
+          isActive: true,
+          order: 4
+        }
+      ];
+      try {
+        await Testimonial.bulkCreate(defaultTestimonials);
+        testimonials = await Testimonial.findAll({ 
+          where: whereClause,
+          order: [['order', 'ASC'], ['createdAt', 'DESC']] 
+        });
+      } catch (e) {
+        return res.json(defaultTestimonials.map((t, idx) => ({ id: idx + 1, ...t })));
+      }
+    }
+    
+    res.json(testimonials);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/testimonials', async (req, res) => {
+  try {
+    const { Testimonial } = require('../models');
+    await Testimonial.sync();
+    const testimonial = await Testimonial.create(req.body);
+    res.status(201).json(testimonial);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.put('/testimonials/:id', async (req, res) => {
+  try {
+    const { Testimonial } = require('../models');
+    await Testimonial.sync();
+    await Testimonial.update(req.body, { where: { id: req.params.id } });
+    const updated = await Testimonial.findByPk(req.params.id);
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.delete('/testimonials/:id', async (req, res) => {
+  try {
+    const { Testimonial } = require('../models');
+    await Testimonial.sync();
+    await Testimonial.destroy({ where: { id: req.params.id } });
+    res.json({ message: 'Deleted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 module.exports = router;

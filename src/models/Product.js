@@ -33,11 +33,16 @@ const Product = sequelize.define('Product', {
     defaultValue: 'internal',
     allowNull: false,
   },
+  isQreiniProduct: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  },
   category: {
     type: DataTypes.STRING,
   },
   image: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
   },
   salesCount: {
     type: DataTypes.INTEGER,

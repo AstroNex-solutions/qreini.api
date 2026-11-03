@@ -12,6 +12,8 @@ const Setting = require('./Setting');
 const Sample = require('./Sample');
 const Category = require('./Category');
 const B2BRequest = require('./B2BRequest');
+const Partner = require('./Partner');
+const Testimonial = require('./Testimonial');
 
 // Define Relationships
 
@@ -63,5 +65,7 @@ module.exports = {
   Setting,
   Sample,
   Category,
-  B2BRequest
+  B2BRequest,
+  Partner,
+  Testimonial
 };

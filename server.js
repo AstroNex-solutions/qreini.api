@@ -6,6 +6,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const bcrypt = require('bcrypt');
+const path = require('path');
+const fs = require('fs');
 
 const { sequelize, User } = require('./src/models');
 const apiRoutes = require('./src/routes/api');
@@ -16,6 +18,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // CORS Configuration
@@ -56,7 +59,22 @@ app.use(express.urlencoded({
   extended: true
 }));
 
-app.use('/uploads', express.static('uploads'));
+// Static file serving for uploads with CORS, absolute path, and fallback support
+const uploadsPath = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+}
+
+const serveUploads = express.static(uploadsPath, {
+  setHeaders: (res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  }
+});
+
+app.use('/uploads', serveUploads);
+app.use('/api/uploads', serveUploads);
 
 // Socket.io
 const io = new Server(server, {

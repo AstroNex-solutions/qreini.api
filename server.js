@@ -137,7 +137,7 @@ async function startServer() {
   try {
     await sequelize.authenticate();
 
-    await sequelize.sync({ alter: 1 });
+    await sequelize.sync({ alter: 0 });
 
     console.log('MySQL Database connected successfully');
 

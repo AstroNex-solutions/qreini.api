@@ -5,24 +5,16 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcrypt');
 const { Product, Customer, Order, OrderItem, Design, Conversation, Message, User } = require('../models');
+const { cloudinary, isCloudinaryConfigured } = require('../config/cloudinary');
 
-// Create uploads directory if it doesn't exist
+// Create uploads directory if it doesn't exist (for fallback)
 const uploadsDir = path.resolve(__dirname, '../../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const rawExt = path.extname(file.originalname || '');
-    const cleanExt = (rawExt ? rawExt.toLowerCase() : '.png').replace(/[^a-z0-9.]/gi, '');
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, `${uniqueSuffix}${cleanExt}`);
-  }
-});
+// Memory storage to stream directly to Cloudinary or write to disk as fallback
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
@@ -447,32 +439,80 @@ router.post('/upload', (req, res) => {
       return res.status(400).json({ error: err.message || 'فشل في رفع الملف' });
     }
 
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'لم يتم استلام أي ملف للرفع' });
     }
 
-    // Determine correct protocol (HTTPS vs HTTP)
-    const forwardedProto = req.headers['x-forwarded-proto'];
-    const host = req.get('host') || '';
-    const isProductionHost = !host.includes('localhost') && !host.includes('127.0.0.1');
-    const isHttps = forwardedProto === 'https' || req.protocol === 'https' || isProductionHost;
-    const protocol = isHttps ? 'https' : 'http';
+    // 1. Check if Cloudinary is configured
+    if (isCloudinaryConfigured()) {
+      const rawExt = path.extname(req.file.originalname || '');
+      const cleanName = path.basename(req.file.originalname, rawExt).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const uniqueSuffix = Date.now() + '_' + Math.round(Math.random() * 1E6);
+      const publicId = `${cleanName}_${uniqueSuffix}`;
 
-    // Base URL resolution
-    const baseUrl = process.env.APP_URL 
-      ? process.env.APP_URL.replace(/\/$/, '') 
-      : `${protocol}://${host}`;
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'qreini_uniforms',
+          public_id: publicId,
+          resource_type: 'auto'
+        },
+        (error, result) => {
+          if (error) {
+            console.error('Cloudinary upload error:', error);
+            return res.status(500).json({ error: `فشل الرفع إلى Cloudinary: ${error.message}` });
+          }
 
-    const fileUrl = `${baseUrl}/uploads/${req.file.filename}`;
-    const relativePath = `/uploads/${req.file.filename}`;
+          return res.json({
+            url: result.secure_url,
+            path: result.secure_url,
+            filename: result.public_id,
+            public_id: result.public_id,
+            size: result.bytes || req.file.size,
+            mimetype: req.file.mimetype,
+            storage: 'cloudinary'
+          });
+        }
+      );
 
-    res.json({
-      url: fileUrl,
-      path: relativePath,
-      filename: req.file.filename,
-      size: req.file.size,
-      mimetype: req.file.mimetype
-    });
+      uploadStream.end(req.file.buffer);
+    } else {
+      // 2. Graceful Fallback: write to local disk if Cloudinary credentials are not configured
+      const rawExt = path.extname(req.file.originalname || '');
+      const cleanExt = (rawExt ? rawExt.toLowerCase() : '.png').replace(/[^a-z0-9.]/gi, '');
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const filename = `${uniqueSuffix}${cleanExt}`;
+      const filePath = path.join(uploadsDir, filename);
+
+      try {
+        fs.writeFileSync(filePath, req.file.buffer);
+      } catch (fsErr) {
+        console.error('Disk write error:', fsErr);
+        return res.status(500).json({ error: 'فشل حفظ الملف على الخادم المحلي' });
+      }
+
+      // Determine correct protocol (HTTPS vs HTTP)
+      const forwardedProto = req.headers['x-forwarded-proto'];
+      const host = req.get('host') || '';
+      const isProductionHost = !host.includes('localhost') && !host.includes('127.0.0.1');
+      const isHttps = forwardedProto === 'https' || req.protocol === 'https' || isProductionHost;
+      const protocol = isHttps ? 'https' : 'http';
+
+      const baseUrl = process.env.APP_URL 
+        ? process.env.APP_URL.replace(/\/$/, '') 
+        : `${protocol}://${host}`;
+
+      const fileUrl = `${baseUrl}/uploads/${filename}`;
+      const relativePath = `/uploads/${filename}`;
+
+      return res.json({
+        url: fileUrl,
+        path: relativePath,
+        filename: filename,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+        storage: 'local'
+      });
+    }
   });
 });
 

@@ -16,7 +16,8 @@ const Product = sequelize.define('Product', {
   },
   price: {
     type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
+    allowNull: true,
+    defaultValue: 0,
   },
   sku: {
     type: DataTypes.STRING,
